@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'extension', 'icons');
+const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'icons');
 const SIZES = [16, 32, 48, 128];
 const ACCENT = [79, 70, 229];
 const GLYPH = [255, 255, 255];

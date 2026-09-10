@@ -1,6 +1,5 @@
+import type { TaskAdapter } from '../core/types.js';
 import { clickUpAdapter } from './clickup.js';
-
-/** @typedef {import('../core/types.js').TaskAdapter} TaskAdapter */
 
 /**
  * The registry. Adding a source is: write one file implementing `TaskAdapter`,
@@ -8,30 +7,18 @@ import { clickUpAdapter } from './clickup.js';
  * storage schema changes.
  *
  * Array order is the display order in the popup and options page.
- *
- * @type {TaskAdapter[]}
  */
-export const adapters = [clickUpAdapter];
+export const adapters: readonly TaskAdapter[] = [clickUpAdapter];
 
-/**
- * @param {string} id
- * @returns {TaskAdapter | undefined}
- */
-export function getAdapter(id) {
+export function getAdapter(id: string): TaskAdapter | undefined {
   return adapters.find((adapter) => adapter.id === id);
 }
 
-/**
- * @param {string} id
- * @returns {string}
- */
-export function displayNameFor(id) {
+/** Falls back to the raw id so a task from a retired adapter still renders. */
+export function displayNameFor(id: string): string {
   return getAdapter(id)?.displayName ?? id;
 }
 
-/**
- * @returns {string[]}
- */
-export function adapterIds() {
+export function adapterIds(): string[] {
   return adapters.map((adapter) => adapter.id);
 }

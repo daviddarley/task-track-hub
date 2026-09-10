@@ -1,6 +1,15 @@
-import { AdapterError } from './errors.js';
+import { AdapterError, type AdapterErrorKind } from './errors.js';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
+
+export interface RequestOptions {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  timeoutMs?: number;
+  /** Adapter id, so a failure can be attributed to the right source. */
+  source: string;
+}
 
 /**
  * `fetch` + JSON + a timeout + HTTP status mapped onto `AdapterError` kinds.
@@ -9,31 +18,25 @@ const DEFAULT_TIMEOUT_MS = 20_000;
  * make cross-origin requests to hosts declared in `host_permissions`; content
  * scripts may not, which is why no adapter is importable from page context.
  *
- * @param {string} url
- * @param {{
- *   method?: string,
- *   headers?: Record<string, string>,
- *   body?: unknown,
- *   timeoutMs?: number,
- *   source: string,
- * }} options
- * @returns {Promise<any>}
+ * The return type is `unknown` on purpose: an HTTP response is untyped data
+ * until an adapter narrows it, and pretending otherwise is how `undefined`
+ * ends up in storage.
  */
-export async function requestJson(url, options) {
+export async function requestJson(url: string, options: RequestOptions): Promise<unknown> {
   const { method = 'GET', headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS, source } = options;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  /** @type {Response} */
-  let response;
+  const init: RequestInit = { method, headers, signal: controller.signal };
+  if (body !== undefined) {
+    init.body = JSON.stringify(body);
+    init.headers = { 'Content-Type': 'application/json', ...headers };
+  }
+
+  let response: Response;
   try {
-    response = await fetch(url, {
-      method,
-      headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.signal,
-    });
+    response = await fetch(url, init);
   } catch (err) {
     if (controller.signal.aborted) {
       throw new AdapterError('timeout', `Request to ${hostOf(url)} timed out.`, { source, cause: err });
@@ -51,17 +54,13 @@ export async function requestJson(url, options) {
   }
 
   try {
-    return await response.json();
+    return (await response.json()) as unknown;
   } catch (err) {
     throw new AdapterError('unknown', `${hostOf(url)} returned a non-JSON response.`, { source, cause: err });
   }
 }
 
-/**
- * @param {number} status
- * @returns {import('./errors.js').AdapterErrorKind}
- */
-function kindForStatus(status) {
+function kindForStatus(status: number): AdapterErrorKind {
   if (status === 401 || status === 403) return 'auth';
   if (status === 429) return 'rate_limit';
   if (status >= 500) return 'network';
@@ -71,32 +70,37 @@ function kindForStatus(status) {
 /**
  * Pull whatever the API is willing to tell us out of an error body, without
  * letting a huge HTML error page into storage.
- *
- * @param {Response} response
- * @returns {Promise<string>}
  */
-async function errorMessage(response) {
+async function errorMessage(response: Response): Promise<string> {
   let detail = '';
   try {
     const text = await response.text();
     try {
-      const parsed = JSON.parse(text);
-      detail = parsed?.err ?? parsed?.error ?? parsed?.message ?? '';
+      const parsed: unknown = JSON.parse(text);
+      detail = readErrorField(parsed) ?? text;
     } catch {
       detail = text;
     }
   } catch {
-    /* body already consumed or unreadable — status alone will have to do */
+    /* body already consumed or unreadable — the status alone will have to do */
   }
-  detail = String(detail).replace(/\s+/g, ' ').trim().slice(0, 200);
+
+  detail = detail.replace(/\s+/g, ' ').trim().slice(0, 200);
   return detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
 }
 
-/**
- * @param {string} url
- * @returns {string}
- */
-function hostOf(url) {
+/** APIs disagree about which key holds the message; try the common ones. */
+function readErrorField(parsed: unknown): string | null {
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const record = parsed as Record<string, unknown>;
+  for (const key of ['err', 'error', 'message', 'detail']) {
+    const value = record[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  return null;
+}
+
+function hostOf(url: string): string {
   try {
     return new URL(url).host;
   } catch {

@@ -1,16 +1,16 @@
 import { adapters } from '../adapters/index.js';
 import { describeErrorKind, toAdapterError } from './errors.js';
-import { getSettings, getSnapshot, saveSnapshot } from './storage.js';
 import { countOpen } from './sort.js';
+import { getSettings, getSnapshot, saveSnapshot } from './storage.js';
+import type { NormalizedTask, Settings, Snapshot, SourceState, TaskAdapter } from './types.js';
 
-/** @typedef {import('./types.js').NormalizedTask} NormalizedTask */
-/** @typedef {import('./types.js').Snapshot} Snapshot */
-/** @typedef {import('./types.js').SourceState} SourceState */
-/** @typedef {import('./types.js').TaskAdapter} TaskAdapter */
+interface AdapterResult {
+  tasks: NormalizedTask[];
+  state: SourceState;
+}
 
 /** In-flight sync, so an alarm and a manual refresh can't stampede each other. */
-/** @type {Promise<Snapshot> | null} */
-let inFlight = null;
+let inFlight: Promise<Snapshot> | null = null;
 
 /**
  * Poll every enabled adapter, merge the results, persist one snapshot.
@@ -19,35 +19,22 @@ let inFlight = null;
  * ClickUp answers and NetSuite's token has expired, the ClickUp tasks still
  * render and NetSuite gets an error row plus its last known tasks, rather than
  * the whole list going blank.
- *
- * @param {{ reason?: string }} [options]
- * @returns {Promise<Snapshot>}
  */
-export function syncAll(options = {}) {
-  if (inFlight) return inFlight;
-  inFlight = runSync(options.reason ?? 'manual').finally(() => {
+export function syncAll(options: { reason?: string } = {}): Promise<Snapshot> {
+  inFlight ??= runSync(options.reason ?? 'manual').finally(() => {
     inFlight = null;
   });
   return inFlight;
 }
 
-/**
- * @param {string} reason
- * @returns {Promise<Snapshot>}
- */
-async function runSync(reason) {
+async function runSync(reason: string): Promise<Snapshot> {
   const settings = await getSettings();
   const previous = await getSnapshot();
 
-  const results = await Promise.all(
-    adapters.map((adapter) => runAdapter(adapter, settings, previous)),
-  );
-
-  /** @type {NormalizedTask[]} */
+  const results = await Promise.all(adapters.map((adapter) => runAdapter(adapter, settings, previous)));
   const tasks = results.flatMap((result) => result.tasks);
 
-  /** @type {Snapshot} */
-  const snapshot = {
+  const snapshot: Snapshot = {
     tasks,
     sources: results.map((result) => result.state),
     updatedAt: new Date().toISOString(),
@@ -59,71 +46,64 @@ async function runSync(reason) {
   return snapshot;
 }
 
-/**
- * @param {TaskAdapter} adapter
- * @param {import('./types.js').Settings} settings
- * @param {Snapshot} previous
- * @returns {Promise<{ tasks: NormalizedTask[], state: SourceState }>}
- */
-async function runAdapter(adapter, settings, previous) {
-  const base = { id: adapter.id, displayName: adapter.displayName };
+async function runAdapter(
+  adapter: TaskAdapter,
+  settings: Settings,
+  previous: Snapshot,
+): Promise<AdapterResult> {
+  const identity = { id: adapter.id, displayName: adapter.displayName };
   const priorState = previous.sources.find((source) => source.id === adapter.id);
   const priorTasks = previous.tasks.filter((task) => task.source === adapter.id);
 
   if (settings.adapters[adapter.id]?.enabled === false) {
     // Disabled means "pretend this source doesn't exist" — drop its cached tasks
     // so the badge count matches what the popup actually shows.
-    return {
-      tasks: [],
-      state: { ...base, status: 'disabled', count: 0, error: null, errorKind: null, fetchedAt: null, stale: false },
-    };
+    return { tasks: [], state: { ...identity, status: 'disabled' } };
   }
 
   try {
     if (!(await adapter.isConfigured())) {
-      return {
-        tasks: [],
-        state: {
-          ...base,
-          status: 'unconfigured',
-          count: 0,
-          error: null,
-          errorKind: null,
-          fetchedAt: null,
-          stale: false,
-        },
-      };
+      return { tasks: [], state: { ...identity, status: 'unconfigured' } };
     }
 
     const tasks = await adapter.fetchTasks();
     return {
       tasks,
-      state: {
-        ...base,
-        status: 'ok',
-        count: tasks.length,
-        error: null,
-        errorKind: null,
-        fetchedAt: new Date().toISOString(),
-        stale: false,
-      },
+      state: { ...identity, status: 'ok', count: tasks.length, fetchedAt: new Date().toISOString() },
     };
   } catch (err) {
     const error = toAdapterError(err, adapter.id);
     console.warn(`[task-hub] ${adapter.id} sync failed (${error.kind}):`, error.message);
+
     return {
       // Serve the last good data rather than nothing — stale work items are far
       // more useful than an empty list, as long as the UI says they're stale.
       tasks: priorTasks,
       state: {
-        ...base,
+        ...identity,
         status: 'error',
         count: priorTasks.length,
         error: `${describeErrorKind(error.kind, adapter.displayName)} (${error.message})`,
         errorKind: error.kind,
-        fetchedAt: priorState?.fetchedAt ?? null,
+        fetchedAt: lastSuccessAt(priorState),
         stale: priorTasks.length > 0,
       },
     };
+  }
+}
+
+/**
+ * When did this source last actually succeed? `unconfigured` and `disabled`
+ * carry no timestamp, which is exactly why `SourceState` is a union.
+ */
+function lastSuccessAt(state: SourceState | undefined): string | null {
+  if (!state) return null;
+  switch (state.status) {
+    case 'ok':
+      return state.fetchedAt;
+    case 'error':
+      return state.fetchedAt;
+    default:
+      return null;
   }
 }

@@ -10,10 +10,14 @@
 
 import { getAdapter } from './adapters/index.js';
 import { updateBadge } from './core/badge.js';
+import type { Message, MessageResponses, Result } from './core/messages.js';
 import { getSettings, getSnapshot } from './core/storage.js';
 import { syncAll } from './core/sync.js';
+import type { Snapshot } from './core/types.js';
 
 const ALARM_NAME = 'task-hub-refresh';
+
+type AnyResponse = MessageResponses[Message['type']];
 
 chrome.runtime.onInstalled.addListener(() => {
   void bootstrap('installed');
@@ -28,55 +32,64 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   void refresh('alarm');
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  handleMessage(message)
-    .then((value) => sendResponse({ ok: true, value }))
-    .catch((err) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
-  // Keep the message channel open for the async reply above.
-  return true;
-});
+chrome.runtime.onMessage.addListener(
+  (message: unknown, _sender, sendResponse: (response: Result<AnyResponse>) => void) => {
+    handleMessage(message)
+      .then((value) => sendResponse({ ok: true, value }))
+      .catch((err: unknown) => sendResponse({ ok: false, error: describe(err) }));
+
+    // Keep the message channel open for the async reply above.
+    return true;
+  },
+);
 
 /**
- * @param {import('./core/messages.js').Message} message
- * @returns {Promise<any>}
+ * `message` arrives as `unknown` because anything on the machine that can reach
+ * this extension can post to it. Narrow before trusting it.
  */
-async function handleMessage(message) {
-  switch (message?.type) {
+async function handleMessage(message: unknown): Promise<AnyResponse> {
+  const parsed = parseMessage(message);
+
+  switch (parsed.type) {
     case 'refresh':
       return refresh('manual');
 
-    case 'reschedule':
+    case 'reschedule': {
       await ensureAlarm({ reset: true });
-      return { ok: true };
+      const { refreshMinutes } = await getSettings();
+      return { refreshMinutes };
+    }
 
     case 'connect': {
-      const adapter = getAdapter(message.adapterId);
-      if (!adapter) throw new Error(`Unknown adapter: ${message.adapterId}`);
+      const adapter = getAdapter(parsed.adapterId);
+      if (!adapter) throw new Error(`Unknown adapter: ${parsed.adapterId}`);
       // Validating credentials means hitting the network, which only the worker
       // is allowed to do — hence the round trip from the options page.
       await adapter.authenticate();
       return refresh('connect');
     }
-
-    default:
-      throw new Error(`Unknown message: ${JSON.stringify(message)}`);
   }
 }
 
-/**
- * @param {string} reason
- * @returns {Promise<void>}
- */
-async function bootstrap(reason) {
+function parseMessage(message: unknown): Message {
+  if (typeof message !== 'object' || message === null) {
+    throw new Error('Malformed message.');
+  }
+
+  const { type, adapterId } = message as { type?: unknown; adapterId?: unknown };
+
+  if (type === 'refresh' || type === 'reschedule') return { type };
+  if (type === 'connect' && typeof adapterId === 'string') return { type, adapterId };
+
+  throw new Error(`Unknown message: ${JSON.stringify(message)}`);
+}
+
+async function bootstrap(reason: string): Promise<void> {
   await ensureAlarm({ reset: true });
   await refresh(reason);
 }
 
-/**
- * @param {string} reason
- * @returns {Promise<import('./core/types.js').Snapshot>}
- */
-async function refresh(reason) {
+async function refresh(reason: string): Promise<Snapshot> {
   const snapshot = await syncAll({ reason });
   await updateBadge(snapshot);
   return snapshot;
@@ -85,11 +98,8 @@ async function refresh(reason) {
 /**
  * `chrome.alarms` survives the service worker being torn down, which is the
  * whole reason polling lives here rather than in a `setInterval`.
- *
- * @param {{ reset?: boolean }} [options]
- * @returns {Promise<void>}
  */
-async function ensureAlarm(options = {}) {
+async function ensureAlarm(options: { reset?: boolean } = {}): Promise<void> {
   const settings = await getSettings();
   const existing = await chrome.alarms.get(ALARM_NAME);
 
@@ -100,6 +110,10 @@ async function ensureAlarm(options = {}) {
     delayInMinutes: settings.refreshMinutes,
     periodInMinutes: settings.refreshMinutes,
   });
+}
+
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // A worker that was torn down and revived still needs the badge to be right,

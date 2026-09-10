@@ -4,9 +4,15 @@
   "private": true,
   "description": "Chrome extension that merges your assigned work from ClickUp, NetSuite and future sources into one popup.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "node tools/smoke-test.mjs",
-    "typecheck": "tsc --noEmit -p jsconfig.json",
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
+    "test": "npm run build && node --test --test-reporter=spec",
+    "typecheck": "tsc --noEmit",
     "icons": "node tools/make-icons.mjs"
   },
   "devDependencies": {

@@ -11,15 +11,20 @@ Built from [task-hub-extension-plan.md](task-hub-extension-plan.md).
 
 ## Install it
 
+```sh
+npm install
+npm run build      # compiles src/ → dist/
+```
+
 1. `chrome://extensions` → enable **Developer mode**.
-2. **Load unpacked** → select the [extension/](extension/) folder (not the repo root).
+2. **Load unpacked** → select the generated **`dist/`** folder (not the repo root, not `src/`).
 3. Open the extension's **Options** and paste a ClickUp personal API token
    (ClickUp → **Settings → Apps** → generate; it starts with `pk_` and never expires).
 4. Hit **Connect**. It resolves your user id and workspaces once and caches them, then does a
    first sync. The badge should show your open count within a second or two.
 
-There is no build step. The extension loads its source directly — `npm install` is only needed
-for the type check and tests.
+While working on it, `npm run watch` rebuilds on save. Chrome still needs the reload button on
+`chrome://extensions` to pick up service-worker changes.
 
 ## How it fits together
 
@@ -51,28 +56,57 @@ Three rules hold the design together:
 
 | Path | What lives there |
 |---|---|
-| [extension/manifest.json](extension/manifest.json) | MV3 manifest, permissions, host permissions |
-| [extension/src/background.js](extension/src/background.js) | Alarm schedule, message handling, badge refresh |
-| [extension/src/core/types.js](extension/src/core/types.js) | `NormalizedTask`, `TaskAdapter`, `Snapshot` — the shared vocabulary |
-| [extension/src/core/sync.js](extension/src/core/sync.js) | Polls adapters concurrently, merges, contains per-source failure |
-| [extension/src/core/storage.js](extension/src/core/storage.js) | The only module that touches `chrome.storage` |
-| [extension/src/core/http.js](extension/src/core/http.js) | `fetch` + timeout + HTTP status → typed `AdapterError` |
-| [extension/src/adapters/](extension/src/adapters/) | One file per service, plus the registry |
-| [extension/src/popup/](extension/src/popup/) | The list view |
-| [extension/src/options/](extension/src/options/) | Credentials, workspace picker, refresh + display settings |
+| [src/manifest.json](src/manifest.json) | MV3 manifest, permissions, host permissions |
+| [src/background.ts](src/background.ts) | Alarm schedule, message handling, badge refresh |
+| [src/core/types.ts](src/core/types.ts) | `NormalizedTask`, `TaskAdapter`, `Snapshot` — the shared vocabulary |
+| [src/core/sync.ts](src/core/sync.ts) | Polls adapters concurrently, merges, contains per-source failure |
+| [src/core/storage.ts](src/core/storage.ts) | The only module that touches `chrome.storage` |
+| [src/core/http.ts](src/core/http.ts) | `fetch` + timeout + HTTP status → typed `AdapterError` |
+| [src/adapters/](src/adapters/) | One file per service, plus the registry |
+| [src/popup/](src/popup/) | The list view |
+| [src/options/](src/options/) | Credentials, workspace picker, refresh + display settings |
+| [src/ui/dom.ts](src/ui/dom.ts) | Typed DOM helpers shared by both pages |
+| `dist/` | Build output — this is what you load into Chrome. Git-ignored. |
 
 ## Commands
 
 ```sh
-npm install       # only needed for the two commands below
-npm test          # smoke tests over normalization, sorting, date formatting
-npm run typecheck # tsc --noEmit over the JSDoc types
-npm run icons     # regenerate extension/icons/*.png
+npm run build     # compile src/ → dist/, copy static assets
+npm run watch     # same, rebuilding on save
+npm test          # builds, then runs the suite against dist/
+npm run typecheck # tsc --noEmit
+npm run icons     # regenerate src/icons/*.png
+npm run clean     # remove dist/
 ```
 
-The source is plain ES modules with JSDoc types rather than TypeScript, because this machine is on
-Node 15 and every current bundler needs Node 18+. `npm run typecheck` still enforces the
-`TaskAdapter` contract in full — a new adapter that gets the shape wrong fails the check.
+## Build setup
+
+TypeScript, compiled by `tsc` straight to native ES modules — **no bundler**. The manifest's
+`"type": "module"` service worker and the pages' `<script type="module">` load the emitted files
+directly. This keeps a one-to-one mapping between source file and shipped file, which matters a lot
+when you're debugging a service worker that Chrome tears down between polls: what you see in
+devtools is the file you wrote, minus the types, with a source map back to the original.
+
+[tools/build.mjs](tools/build.mjs) runs `tsc` and copies the files the compiler ignores
+(manifest, HTML, CSS, icons) into `dist/`, preserving structure.
+
+`tsconfig.json` runs at full strictness — `strict`, plus `noUncheckedIndexedAccess`,
+`exactOptionalPropertyTypes`, `verbatimModuleSyntax`, and `noUnusedLocals`/`noUnusedParameters`.
+Where that's load-bearing:
+
+- **`SourceState` is a discriminated union** on `status`. `error` and `stale` exist only on the
+  failure variant, so the popup can't read an error message off a source that succeeded, and can't
+  forget to handle one that failed.
+- **`requestJson` returns `unknown`.** HTTP responses are untyped data until an adapter narrows
+  them; the narrowing happens in one clearly marked block per adapter rather than being assumed.
+- **`describeErrorKind` has no `default` case** — adding an `AdapterErrorKind` breaks the build
+  until every site handles it.
+- **`sendMessage` maps message type → response type**, so `{ type: 'reschedule' }` resolves to
+  `{ refreshMinutes }` without a cast at the call site.
+
+Tests are plain `.mjs` under [tests/](tests/) and import from `dist/`, so they exercise the compiled
+artifact Chrome actually loads rather than the source. They run on Node's built-in test runner —
+no jest, no vitest, no config.
 
 ## What Phase 1 actually does
 
@@ -92,8 +126,6 @@ Node 15 and every current bundler needs Node 18+. `npm run typecheck` still enfo
 
 ## Deviations from the plan, and why
 
-- **Plain ESM + JSDoc instead of TypeScript.** Node 15 on this machine; no bundler will run. Type
-  safety is preserved via `checkJs`.
 - **`identity` permission not requested yet.** The plan's manifest skeleton lists it, but it's only
   needed for NetSuite's OAuth flow in Phase 2. Requesting it now would be a permission the
   extension can't justify — the plan's own advice on asking for the narrowest scope applies.
