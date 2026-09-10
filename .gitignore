@@ -6,3 +6,4 @@ dist/
 Thumbs.db
 *.zip
 .vscode/
+extension-private-key.pem

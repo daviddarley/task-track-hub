@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Task Track Hub",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAife0dmj0ICjK5To8uNtuuCoRe9VG6sqJMlWzztPrHid6BeuPPla1JtyqfGEBJGQUMZWdF2l0exPVJf7Wwvn7X9V4bN7sh+4nf5OWwysg5atcmVcazvXfMEJzYTKhasoyErGwPHhdiss1t9Df/vTZfbhnovd6FNRzAsv55ChJbtgnJgwy4xAUBcMvP061q+SggJcn+QNVGGgak1HJzdMhGSTDogTHqZY9yl4vcVqhsNOIpG6RkQKiGhi9bluC0VzgxSH1f+fUxZ8SREqRHxtyQgdZDxtsvwx/13+XVsxMgdsRkfgGv1MMDvMGk2H3EC7G32c++mI6ubcomBDIxCBUewIDAQAB",
   "version": "0.1.0",
   "description": "Your assigned work from ClickUp (and later NetSuite) merged into one popup.",
-  "permissions": ["storage", "alarms"],
-  "host_permissions": ["https://api.clickup.com/*"],
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://api.clickup.com/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
