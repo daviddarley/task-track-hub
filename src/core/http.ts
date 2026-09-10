@@ -5,7 +5,13 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
+  /** JSON request body. Mutually exclusive with `form`. */
   body?: unknown;
+  /**
+   * Form-encoded request body. OAuth 2.0 token endpoints require
+   * `application/x-www-form-urlencoded` and reject JSON.
+   */
+  form?: Record<string, string>;
   timeoutMs?: number;
   /** Adapter id, so a failure can be attributed to the right source. */
   source: string;
@@ -23,13 +29,16 @@ export interface RequestOptions {
  * ends up in storage.
  */
 export async function requestJson(url: string, options: RequestOptions): Promise<unknown> {
-  const { method = 'GET', headers = {}, body, timeoutMs = DEFAULT_TIMEOUT_MS, source } = options;
+  const { method = 'GET', headers = {}, body, form, timeoutMs = DEFAULT_TIMEOUT_MS, source } = options;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const init: RequestInit = { method, headers, signal: controller.signal };
-  if (body !== undefined) {
+  if (form !== undefined) {
+    init.body = new URLSearchParams(form).toString();
+    init.headers = { 'Content-Type': 'application/x-www-form-urlencoded', ...headers };
+  } else if (body !== undefined) {
     init.body = JSON.stringify(body);
     init.headers = { 'Content-Type': 'application/json', ...headers };
   }

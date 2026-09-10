@@ -44,6 +44,52 @@
       </section>
 
       <section class="card">
+        <div class="card__head">
+          <h2>NetSuite</h2>
+          <label class="toggle">
+            <input type="checkbox" id="netsuite-enabled" />
+            <span>Enabled</span>
+          </label>
+        </div>
+
+        <p class="hint">
+          Pulls Support Cases assigned to you. Needs a one-time integration record in NetSuite —
+          see <code>docs/netsuite-oauth-setup.md</code>. Uses OAuth 2.0 with PKCE as a public client,
+          so there is no client secret to enter.
+        </p>
+
+        <label class="field">
+          <span class="field__label">Account ID</span>
+          <input type="text" id="netsuite-account" autocomplete="off" spellcheck="false" placeholder="6967599" />
+          <span class="hint">Production or sandbox, e.g. <code>1234567_SB1</code>.</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Client ID</span>
+          <input type="text" id="netsuite-client" autocomplete="off" spellcheck="false" />
+          <span class="hint">From the integration record. Not a secret — public clients have none.</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Your employee internal ID</span>
+          <input type="text" id="netsuite-employee" autocomplete="off" spellcheck="false" placeholder="431775" />
+          <span class="hint">Setup &rarr; Users/Roles &rarr; Manage Users &rarr; your record, then read <code>id=</code> from the URL.</span>
+        </label>
+
+        <div class="field">
+          <span class="field__label">Redirect URI for the integration record</span>
+          <input type="text" id="netsuite-redirect" readonly />
+          <span class="hint">Copy this into NetSuite exactly, trailing slash included.</span>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="button" id="netsuite-connect">Connect</button>
+          <button type="button" class="button button--ghost" id="netsuite-disconnect">Disconnect</button>
+          <span class="status" id="netsuite-status"></span>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>Refresh &amp; display</h2>
 
         <label class="field">
@@ -80,13 +126,6 @@
         <p class="status" id="settings-status"></p>
       </section>
 
-      <section class="card card--muted">
-        <h2>Coming next</h2>
-        <p class="hint">
-          NetSuite Support Cases arrive in Phase 2 over OAuth 2.0 — Oracle deprecates new Token-Based Auth
-          integrations for REST in 2027.1, so this is built on OAuth from the start rather than migrated later.
-        </p>
-      </section>
     </main>
 
     <script type="module" src="options.js"></script>

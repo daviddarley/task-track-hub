@@ -62,7 +62,8 @@ Three rules hold the design together:
 | [src/core/sync.ts](src/core/sync.ts) | Polls adapters concurrently, merges, contains per-source failure |
 | [src/core/storage.ts](src/core/storage.ts) | The only module that touches `chrome.storage` |
 | [src/core/http.ts](src/core/http.ts) | `fetch` + timeout + HTTP status → typed `AdapterError` |
-| [src/adapters/](src/adapters/) | One file per service, plus the registry |
+| [src/core/pkce.ts](src/core/pkce.ts) | RFC 7636 PKCE — what lets NetSuite work with no client secret |
+| [src/adapters/](src/adapters/) | One file per service (transport + pure mapping), plus the registry |
 | [src/popup/](src/popup/) | The list view |
 | [src/options/](src/options/) | Credentials, workspace picker, refresh + display settings |
 | [src/ui/dom.ts](src/ui/dom.ts) | Typed DOM helpers shared by both pages |
@@ -137,9 +138,11 @@ no jest, no vitest, no config.
 ## Roadmap
 
 - [x] **Phase 1** — ClickUp, read-only: options page, polling, badge, popup.
-- [ ] **Phase 2** — NetSuite Support Cases over OAuth 2.0 (`chrome.identity.launchWebAuthFlow` +
-      SuiteQL). Built on OAuth rather than TBA because Oracle deprecates new TBA integrations for
-      REST in 2027.1.
+- [x] **Phase 2** — NetSuite Support Cases over OAuth 2.0 + PKCE (`chrome.identity.launchWebAuthFlow`)
+      and SuiteQL. Built on OAuth rather than TBA because Oracle deprecates new TBA integrations for
+      REST in 2027.1. **Code complete; awaiting a Client ID to exercise end to end** — see
+      [docs/netsuite-oauth-setup.md](docs/netsuite-oauth-setup.md). The SuiteQL query, the ten
+      status ids, and bound-parameter support were all validated against a live account.
 - [ ] **Phase 3** — Unified-list polish. Error containment is done; remaining: cross-source
       grouping options, keyboard navigation.
 - [ ] **Phase 4** — Extensibility hardening: per-adapter enable toggles are in, the registry is in,

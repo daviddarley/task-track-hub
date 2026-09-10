@@ -5,6 +5,7 @@
  */
 
 import { clickUpCredentials, type ClickUpCredentials } from '../adapters/clickup.js';
+import { netSuiteCredentials } from '../adapters/netsuite.js';
 import { sendMessage } from '../core/messages.js';
 import { getSettings, saveSettings } from '../core/storage.js';
 import type { SortBy } from '../core/types.js';
@@ -18,6 +19,14 @@ const els = {
   connect: requireElement('clickup-connect', 'button'),
   disconnect: requireElement('clickup-disconnect', 'button'),
   clickupStatus: requireElement('clickup-status'),
+  nsEnabled: requireElement('netsuite-enabled', 'input'),
+  nsAccount: requireElement('netsuite-account', 'input'),
+  nsClient: requireElement('netsuite-client', 'input'),
+  nsEmployee: requireElement('netsuite-employee', 'input'),
+  nsRedirect: requireElement('netsuite-redirect', 'input'),
+  nsConnect: requireElement('netsuite-connect', 'button'),
+  nsDisconnect: requireElement('netsuite-disconnect', 'button'),
+  nsStatus: requireElement('netsuite-status'),
   refreshMinutes: requireElement('refresh-minutes', 'select'),
   sortBy: requireElement('sort-by', 'select'),
   groupBySource: requireElement('group-by-source', 'input'),
@@ -30,7 +39,11 @@ type Tone = 'ok' | 'error';
 void load();
 
 async function load(): Promise<void> {
-  const [settings, creds] = await Promise.all([getSettings(), clickUpCredentials.get()]);
+  const [settings, creds, ns] = await Promise.all([
+    getSettings(),
+    clickUpCredentials.get(),
+    netSuiteCredentials.get(),
+  ]);
 
   els.refreshMinutes.value = String(settings.refreshMinutes);
   els.sortBy.value = settings.sortBy;
@@ -39,7 +52,16 @@ async function load(): Promise<void> {
   els.enabled.checked = settings.adapters['clickup']?.enabled !== false;
   els.token.value = creds.token ?? '';
 
+  els.nsEnabled.checked = settings.adapters['netsuite']?.enabled !== false;
+  els.nsAccount.value = ns.accountId ?? '';
+  els.nsClient.value = ns.clientId ?? '';
+  els.nsEmployee.value = ns.employeeId ?? '';
+  // Shown read-only so it can be copied into NetSuite without transcription
+  // errors — it must match the integration record byte for byte.
+  els.nsRedirect.value = chrome.identity.getRedirectURL();
+
   renderConnection(creds);
+  renderNetSuiteConnection(ns.refreshToken !== undefined);
   wireEvents();
 }
 
@@ -79,11 +101,82 @@ function wireEvents(): void {
 
   els.showClosed.addEventListener('change', () => {
     void (async () => {
-      // This one changes what we ask ClickUp for, not just how we display it.
+      // This one changes what we ask the sources for, not just how we display it.
       await saveSettings({ showClosed: els.showClosed.checked });
       await refreshAndReport();
     })();
   });
+
+  els.nsConnect.addEventListener('click', () => void connectNetSuite());
+  els.nsDisconnect.addEventListener('click', () => void disconnectNetSuite());
+
+  els.nsEnabled.addEventListener('change', () => {
+    void (async () => {
+      await saveSettings({ adapters: { netsuite: { enabled: els.nsEnabled.checked } } });
+      await sendMessage({ type: 'refresh' });
+      report(els.nsStatus, 'Saved.', 'ok');
+    })();
+  });
+}
+
+async function connectNetSuite(): Promise<void> {
+  const accountId = els.nsAccount.value.trim();
+  const clientId = els.nsClient.value.trim();
+  const employeeId = els.nsEmployee.value.trim();
+
+  if (!accountId || !clientId || !employeeId) {
+    report(els.nsStatus, 'Account ID, Client ID and employee ID are all required.', 'error');
+    return;
+  }
+  if (!/^\d+$/.test(employeeId)) {
+    report(els.nsStatus, 'Employee ID should be the numeric internal id, e.g. 431775.', 'error');
+    return;
+  }
+
+  setNetSuiteBusy(true);
+  report(els.nsStatus, 'Opening NetSuite sign-in…');
+
+  try {
+    // Saved before the flow starts: the worker reads them to build the
+    // authorize URL, and they are settings rather than secrets.
+    await netSuiteCredentials.patch({ accountId, clientId, employeeId });
+    await sendMessage({ type: 'connect', adapterId: 'netsuite' });
+
+    renderNetSuiteConnection(true);
+    report(els.nsStatus, 'Connected.', 'ok');
+  } catch (err) {
+    report(els.nsStatus, describe(err), 'error');
+  } finally {
+    setNetSuiteBusy(false);
+  }
+}
+
+async function disconnectNetSuite(): Promise<void> {
+  setNetSuiteBusy(true);
+
+  try {
+    await netSuiteCredentials.clear();
+    els.nsAccount.value = '';
+    els.nsClient.value = '';
+    els.nsEmployee.value = '';
+    renderNetSuiteConnection(false);
+    await sendMessage({ type: 'refresh' });
+    report(els.nsStatus, 'Disconnected.');
+  } catch (err) {
+    report(els.nsStatus, describe(err), 'error');
+  } finally {
+    setNetSuiteBusy(false);
+  }
+}
+
+function renderNetSuiteConnection(connected: boolean): void {
+  els.nsDisconnect.hidden = !connected;
+  els.nsConnect.textContent = connected ? 'Reconnect' : 'Connect';
+}
+
+function setNetSuiteBusy(busy: boolean): void {
+  els.nsConnect.disabled = busy;
+  els.nsDisconnect.disabled = busy;
 }
 
 /** The <select> is ours, but its value is still a string until proven otherwise. */

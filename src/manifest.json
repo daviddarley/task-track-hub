@@ -6,10 +6,12 @@
   "description": "Your assigned work from ClickUp (and later NetSuite) merged into one popup.",
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "identity"
   ],
   "host_permissions": [
-    "https://api.clickup.com/*"
+    "https://api.clickup.com/*",
+    "https://*.suitetalk.api.netsuite.com/*"
   ],
   "background": {
     "service_worker": "background.js",

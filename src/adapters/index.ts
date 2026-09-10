@@ -1,5 +1,6 @@
 import type { TaskAdapter } from '../core/types.js';
 import { clickUpAdapter } from './clickup.js';
+import { netSuiteAdapter } from './netsuite.js';
 
 /**
  * The registry. Adding a source is: write one file implementing `TaskAdapter`,
@@ -8,7 +9,7 @@ import { clickUpAdapter } from './clickup.js';
  *
  * Array order is the display order in the popup and options page.
  */
-export const adapters: readonly TaskAdapter[] = [clickUpAdapter];
+export const adapters: readonly TaskAdapter[] = [clickUpAdapter, netSuiteAdapter];
 
 export function getAdapter(id: string): TaskAdapter | undefined {
   return adapters.find((adapter) => adapter.id === id);
