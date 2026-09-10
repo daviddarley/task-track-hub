@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Task Track Hub — Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page__header">
+        <h1>Task Track Hub</h1>
+        <p>Credentials are stored in <code>chrome.storage.local</code> on this machine only — never synced.</p>
+      </header>
+
+      <section class="card">
+        <div class="card__head">
+          <h2>ClickUp</h2>
+          <label class="toggle">
+            <input type="checkbox" id="clickup-enabled" />
+            <span>Enabled</span>
+          </label>
+        </div>
+
+        <p class="hint">
+          Generate a personal API token in ClickUp under <strong>Settings → Apps</strong>. It starts with
+          <code>pk_</code> and does not expire.
+        </p>
+
+        <label class="field">
+          <span class="field__label">Personal API token</span>
+          <input type="password" id="clickup-token" autocomplete="off" spellcheck="false" placeholder="pk_…" />
+        </label>
+
+        <div class="field" id="clickup-teams-field" hidden>
+          <span class="field__label">Workspaces to poll</span>
+          <div id="clickup-teams" class="checklist"></div>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="button" id="clickup-connect">Connect</button>
+          <button type="button" class="button button--ghost" id="clickup-disconnect">Disconnect</button>
+          <span class="status" id="clickup-status"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Refresh &amp; display</h2>
+
+        <label class="field">
+          <span class="field__label">Refresh interval</span>
+          <select id="refresh-minutes">
+            <option value="5">Every 5 minutes</option>
+            <option value="10">Every 10 minutes</option>
+            <option value="15">Every 15 minutes</option>
+            <option value="30">Every 30 minutes</option>
+            <option value="60">Every hour</option>
+          </select>
+          <span class="hint">Both ClickUp and NetSuite rate-limit; 5 minutes is the floor.</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Sort by</span>
+          <select id="sort-by">
+            <option value="dueDate">Due date</option>
+            <option value="priority">Priority</option>
+            <option value="title">Title</option>
+          </select>
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="group-by-source" />
+          <span>Group by source</span>
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="show-closed" />
+          <span>Show recently closed items</span>
+        </label>
+
+        <p class="status" id="settings-status"></p>
+      </section>
+
+      <section class="card card--muted">
+        <h2>Coming next</h2>
+        <p class="hint">
+          NetSuite Support Cases arrive in Phase 2 over OAuth 2.0 — Oracle deprecates new Token-Based Auth
+          integrations for REST in 2027.1, so this is built on OAuth from the start rather than migrated later.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

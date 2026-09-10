@@ -1,0 +1,16 @@
+{
+  "name": "task-track-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that merges your assigned work from ClickUp, NetSuite and future sources into one popup.",
+  "type": "module",
+  "scripts": {
+    "test": "node tools/smoke-test.mjs",
+    "typecheck": "tsc --noEmit -p jsconfig.json",
+    "icons": "node tools/make-icons.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.4.5"
+  }
+}

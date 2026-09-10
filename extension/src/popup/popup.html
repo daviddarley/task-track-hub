@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Task Track Hub</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="bar__title">
+        <h1>Task Track Hub</h1>
+        <p class="bar__meta" id="meta">Loading…</p>
+      </div>
+      <div class="bar__actions">
+        <button id="refresh" class="icon-button" type="button" title="Refresh now">
+          <span aria-hidden="true">⟳</span><span class="sr-only">Refresh now</span>
+        </button>
+        <button id="options" class="icon-button" type="button" title="Options">
+          <span aria-hidden="true">⚙</span><span class="sr-only">Open options</span>
+        </button>
+      </div>
+    </header>
+
+    <div id="alerts" class="alerts"></div>
+    <main id="list" class="list" aria-live="polite"></main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
