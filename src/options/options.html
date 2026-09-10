@@ -13,12 +13,18 @@
       </header>
 
       <section class="card">
+        <h2>Sources</h2>
+        <p class="hint">
+          Turn off anything you don't use. A disabled source is never polled, never appears in the popup,
+          and doesn't count toward the badge — its settings below are kept, so you can switch it back on
+          without re-entering anything.
+        </p>
+        <div id="sources" class="checklist checklist--wide"></div>
+      </section>
+
+      <section class="card" data-adapter="clickup">
         <div class="card__head">
           <h2>ClickUp</h2>
-          <label class="toggle">
-            <input type="checkbox" id="clickup-enabled" />
-            <span>Enabled</span>
-          </label>
         </div>
 
         <p class="hint">
@@ -43,13 +49,9 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" data-adapter="netsuite">
         <div class="card__head">
           <h2>NetSuite</h2>
-          <label class="toggle">
-            <input type="checkbox" id="netsuite-enabled" />
-            <span>Enabled</span>
-          </label>
         </div>
 
         <p class="hint">

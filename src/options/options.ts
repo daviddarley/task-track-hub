@@ -5,6 +5,7 @@
  */
 
 import { clickUpCredentials, type ClickUpCredentials } from '../adapters/clickup.js';
+import { adapters } from '../adapters/index.js';
 import { netSuiteCredentials } from '../adapters/netsuite.js';
 import { sendMessage } from '../core/messages.js';
 import { getSettings, saveSettings } from '../core/storage.js';
@@ -12,14 +13,13 @@ import type { SortBy } from '../core/types.js';
 import { el, requireElement } from '../ui/dom.js';
 
 const els = {
-  enabled: requireElement('clickup-enabled', 'input'),
+  sources: requireElement('sources'),
   token: requireElement('clickup-token', 'input'),
   teamsField: requireElement('clickup-teams-field'),
   teams: requireElement('clickup-teams'),
   connect: requireElement('clickup-connect', 'button'),
   disconnect: requireElement('clickup-disconnect', 'button'),
   clickupStatus: requireElement('clickup-status'),
-  nsEnabled: requireElement('netsuite-enabled', 'input'),
   nsAccount: requireElement('netsuite-account', 'input'),
   nsClient: requireElement('netsuite-client', 'input'),
   nsEmployee: requireElement('netsuite-employee', 'input'),
@@ -49,10 +49,8 @@ async function load(): Promise<void> {
   els.sortBy.value = settings.sortBy;
   els.groupBySource.checked = settings.groupBySource;
   els.showClosed.checked = settings.showClosed;
-  els.enabled.checked = settings.adapters['clickup']?.enabled !== false;
   els.token.value = creds.token ?? '';
 
-  els.nsEnabled.checked = settings.adapters['netsuite']?.enabled !== false;
   els.nsAccount.value = ns.accountId ?? '';
   els.nsClient.value = ns.clientId ?? '';
   els.nsEmployee.value = ns.employeeId ?? '';
@@ -62,19 +60,67 @@ async function load(): Promise<void> {
 
   renderConnection(creds);
   renderNetSuiteConnection(ns.refreshToken !== undefined);
+  await renderSources();
   wireEvents();
+}
+
+/**
+ * The source list is built from the adapter registry, not hand-written per
+ * adapter: registering a new `TaskAdapter` gives it a toggle here for free.
+ * Only its credential fields need bespoke UI.
+ */
+async function renderSources(): Promise<void> {
+  const settings = await getSettings();
+
+  const rows = await Promise.all(
+    adapters.map(async (adapter) => {
+      const enabled = settings.adapters[adapter.id]?.enabled !== false;
+      const configured = await adapter.isConfigured();
+
+      const checkbox = el('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = enabled;
+      checkbox.addEventListener('change', () => void toggleSource(adapter.id, checkbox.checked));
+
+      // Saying "not connected yet" here is what makes an empty popup
+      // explicable without hunting through the cards below.
+      const note = el('span', {
+        class: 'checklist__note',
+        text: configured ? '' : 'not connected yet',
+      });
+
+      return el('label', {}, checkbox, el('span', { text: adapter.displayName }), note);
+    }),
+  );
+
+  els.sources.replaceChildren(...rows);
+  for (const adapter of adapters) {
+    markCard(adapter.id, settings.adapters[adapter.id]?.enabled !== false);
+  }
+}
+
+async function toggleSource(adapterId: string, enabled: boolean): Promise<void> {
+  await saveSettings({ adapters: { [adapterId]: { enabled } } });
+  markCard(adapterId, enabled);
+
+  try {
+    await sendMessage({ type: 'refresh' });
+  } catch (err) {
+    report(els.settingsStatus, describe(err), 'error');
+    return;
+  }
+  report(els.settingsStatus, enabled ? `${adapterId} enabled.` : `${adapterId} disabled.`, 'ok');
+}
+
+/** Dim a disabled source's settings card so it reads as inactive, not broken. */
+function markCard(adapterId: string, enabled: boolean): void {
+  const card = document.querySelector<HTMLElement>(`[data-adapter="${adapterId}"]`);
+  if (card) card.dataset['disabled'] = String(!enabled);
 }
 
 function wireEvents(): void {
   els.connect.addEventListener('click', () => void connect());
   els.disconnect.addEventListener('click', () => void disconnect());
-
-  els.enabled.addEventListener('change', () => {
-    void (async () => {
-      await saveSettings({ adapters: { clickup: { enabled: els.enabled.checked } } });
-      await refreshAndReport();
-    })();
-  });
 
   els.refreshMinutes.addEventListener('change', () => {
     void (async () => {
@@ -110,13 +156,6 @@ function wireEvents(): void {
   els.nsConnect.addEventListener('click', () => void connectNetSuite());
   els.nsDisconnect.addEventListener('click', () => void disconnectNetSuite());
 
-  els.nsEnabled.addEventListener('change', () => {
-    void (async () => {
-      await saveSettings({ adapters: { netsuite: { enabled: els.nsEnabled.checked } } });
-      await sendMessage({ type: 'refresh' });
-      report(els.nsStatus, 'Saved.', 'ok');
-    })();
-  });
 }
 
 async function connectNetSuite(): Promise<void> {
@@ -143,6 +182,7 @@ async function connectNetSuite(): Promise<void> {
     await sendMessage({ type: 'connect', adapterId: 'netsuite' });
 
     renderNetSuiteConnection(true);
+    await renderSources();
     report(els.nsStatus, 'Connected.', 'ok');
   } catch (err) {
     report(els.nsStatus, describe(err), 'error');
@@ -160,6 +200,7 @@ async function disconnectNetSuite(): Promise<void> {
     els.nsClient.value = '';
     els.nsEmployee.value = '';
     renderNetSuiteConnection(false);
+    await renderSources();
     await sendMessage({ type: 'refresh' });
     report(els.nsStatus, 'Disconnected.');
   } catch (err) {
@@ -205,6 +246,7 @@ async function connect(): Promise<void> {
 
     const creds = await clickUpCredentials.get();
     renderConnection(creds);
+    await renderSources();
     report(els.clickupStatus, `Connected as ${creds.userName ?? 'ClickUp user'}.`, 'ok');
   } catch (err) {
     report(els.clickupStatus, describe(err), 'error');
@@ -220,6 +262,7 @@ async function disconnect(): Promise<void> {
     await clickUpCredentials.clear();
     els.token.value = '';
     renderConnection({});
+    await renderSources();
     await sendMessage({ type: 'refresh' });
     report(els.clickupStatus, 'Disconnected.');
   } catch (err) {

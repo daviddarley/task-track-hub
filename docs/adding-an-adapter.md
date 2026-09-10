@@ -65,9 +65,15 @@ And the shape every adapter returns ([src/core/types.ts](../src/core/types.ts)):
    the background worker can use it — Manifest V3 grants workers a cross-origin exception that
    content scripts don't get. Keep it narrow; no `<all_urls>`.
 
-7. **Add the options UI** — a card in `options/options.html` plus wiring in `options.ts`. Save the
-   credential, then `sendMessage({ type: 'connect', adapterId: '<id>' })` so the *worker* validates
-   it; the options page can't make the call itself.
+7. **Add the options UI** — a card in `options/options.html` plus wiring in `options.ts`, for your
+   credential fields only. Save the credential, then
+   `sendMessage({ type: 'connect', adapterId: '<id>' })` so the *worker* validates it; the options
+   page can't make the call itself.
+
+   You do **not** need to add an on/off toggle. The **Sources** section is rendered from the
+   registry, so registering your adapter gives it a toggle, a connected/not-connected note, and the
+   disabled-state handling in `core/sync.ts` for free. Give your card
+   `data-adapter="<id>"` and it will dim automatically when the user switches the source off.
 
 8. **Run `npm test`.** It builds first, so a type error fails the test run. The `TaskAdapter`
    annotation is what catches a wrong status string or a missing method — at compile time, not in
