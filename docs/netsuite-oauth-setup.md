@@ -14,10 +14,18 @@ This is **done once for the whole team**, not once per person.
 | Connect in Options and authorize | Each teammate | Once each |
 | Enter their own employee internal id (step 3) | Each teammate | Once each |
 
-The **Client ID is not a secret** — the integration is registered as a *Public Client*, so there is
-no client secret in existence and the id is safe to paste in chat, a wiki, or the repo. Each
-teammate's authorization produces tokens scoped to *their own* NetSuite role, so nobody sees cases
-they couldn't already see in NetSuite.
+The **Client ID is not a secret** in the OAuth sense — the integration is registered as a *Public
+Client*, so no client secret exists, and the id travels in the authorize URL on every sign-in. It is
+fine to share over internal chat or an internal wiki.
+
+**Do not commit it to this repo**, though: the repo is public, and the id combined with the account
+number identifies your employer's NetSuite instance to anyone who reads it. That's not an OAuth
+vulnerability — the redirect URI is locked to this extension's id, and an attacker would still need
+valid NetSuite credentials for the account — but it's needless disclosure. Each teammate pastes the
+id into their own Options page, where it lives in `chrome.storage.local`.
+
+Each teammate's authorization produces tokens scoped to *their own* NetSuite role, so nobody sees
+cases they couldn't already see in NetSuite.
 
 One redirect URI covers everyone: it is derived from the extension id, which is pinned by the
 manifest key, so every teammate loading the same `dist/` has the same id.
