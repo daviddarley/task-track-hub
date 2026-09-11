@@ -3,6 +3,28 @@
 One-time setup on the NetSuite side, for account **6967599** (`CPPROD`). You need the
 **Administrator** role, or a role with the *Integration Application* permission.
 
+## Who does what
+
+This is **done once for the whole team**, not once per person.
+
+| Step | Who | How often |
+|---|---|---|
+| Create the integration record (steps 0–2) | An admin | Once for the account |
+| Share the Client ID with the team | An admin | Once |
+| Connect in Options and authorize | Each teammate | Once each |
+| Enter their own employee internal id (step 3) | Each teammate | Once each |
+
+The **Client ID is not a secret** — the integration is registered as a *Public Client*, so there is
+no client secret in existence and the id is safe to paste in chat, a wiki, or the repo. Each
+teammate's authorization produces tokens scoped to *their own* NetSuite role, so nobody sees cases
+they couldn't already see in NetSuite.
+
+One redirect URI covers everyone: it is derived from the extension id, which is pinned by the
+manifest key, so every teammate loading the same `dist/` has the same id.
+
+**Check with your NetSuite admin** that each teammate's role has REST Web Services permission —
+without it, authorization succeeds and then every query returns 403.
+
 This is built on OAuth 2.0 rather than Token-Based Authentication deliberately: Oracle stops
 accepting new TBA integrations for REST services in release **2027.1**, so a TBA build would need
 redoing within months of being finished.
@@ -56,14 +78,20 @@ navigate away without copying, you have to reset the credentials to get new ones
 - **The CLIENT SECRET is not needed** for a public client. Don't paste it anywhere, and don't send
   it to me. If you'd rather keep a copy for future use, put it in a password manager.
 
-## Step 3 — find your employee internal id
+## Step 3 — each teammate finds their own employee internal id
 
 The SuiteQL query filters cases by the employee they're assigned to, and looking that up on every
-poll would be wasted work. Grab it once:
+poll would be wasted work. Each person grabs theirs once:
 
 **Setup → Users/Roles → Manage Users**, find yourself, open the record, and read the `id=` value
 from the browser's address bar. That number goes into the extension's Options page alongside the
 account id and client id.
+
+An admin can look these up for the whole team in one query:
+
+```sql
+SELECT id, entityid, email FROM employee WHERE email IN ('a@x.com', 'b@x.com')
+```
 
 ## The redirect URI, and why it's pinned
 
@@ -91,12 +119,29 @@ For account `6967599`:
 Only the `suitetalk.api.netsuite.com` host needs to be in `host_permissions` — the authorize URL is
 a browser navigation run by `chrome.identity.launchWebAuthFlow`, not a `fetch`.
 
-## What to send me when you're done
+## What each teammate enters in Options
 
-1. The **Client ID** from step 2.
-2. Your **employee internal id** from step 3.
-3. Confirmation that **Public Client** was checkable — if the checkbox is greyed out or missing,
-   say so, because that changes the approach.
+| Field | Value | Same for everyone? |
+|---|---|---|
+| Account ID | `6967599` | Yes |
+| Client ID | from step 2 | Yes |
+| Your employee internal ID | from step 3 | **No — personal** |
+
+Then **Connect**, which opens NetSuite's sign-in once. Tokens are stored in that person's own
+`chrome.storage.local` and never leave their machine.
+
+## Distributing the extension to the team
+
+Everyone must load the **same build** so the extension id — and therefore the redirect URI — stays
+`cnkigchgphmlkdmiiejnkkbblnoabfob`. Either:
+
+- each teammate clones the repo and runs `npm install && npm run build`, then loads `dist/`; or
+- one person builds and shares the `dist/` folder.
+
+Both require **Developer mode** in `chrome://extensions`, which some managed-Chrome policies
+disable — worth checking before promising the team it'll work. Publishing to the Chrome Web Store
+as an unlisted item avoids that, but the Store assigns its own extension id, which changes the
+redirect URI and means updating the integration record.
 
 ## Sources
 
