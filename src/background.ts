@@ -9,11 +9,13 @@
  */
 
 import { getAdapter } from './adapters/index.js';
+import { finishNetSuiteAuth } from './adapters/netsuite.js';
 import { updateBadge } from './core/badge.js';
 import type { Message, MessageResponses, Result } from './core/messages.js';
 import { getSettings, getSnapshot } from './core/storage.js';
 import { syncAll } from './core/sync.js';
 import type { Snapshot } from './core/types.js';
+import { clearPendingAuth, closeAuthTab, getPendingAuth, matchesPending } from './core/webauth.js';
 
 const ALARM_NAME = 'task-hub-refresh';
 
@@ -30,6 +32,20 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return;
   void refresh('alarm');
+});
+
+/**
+ * Registered at the top level on purpose. An OAuth sign-in can take minutes,
+ * far longer than a service worker survives idle — so this listener must be
+ * re-established every time the worker wakes, not only while a flow is running.
+ * The flow's state lives in storage, which is what makes that possible.
+ */
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  // `changeInfo.url` is only populated for URLs we hold host permission for,
+  // which is the redirect host alone — NetSuite's own login pages stay opaque
+  // to us, as they should.
+  if (!changeInfo.url) return;
+  void handleAuthRedirect(tabId, changeInfo.url);
 });
 
 chrome.runtime.onMessage.addListener(
@@ -82,6 +98,37 @@ function parseMessage(message: unknown): Message {
   if (type === 'connect' && typeof adapterId === 'string') return { type, adapterId };
 
   throw new Error(`Unknown message: ${JSON.stringify(message)}`);
+}
+
+/**
+ * Complete an OAuth flow whose sign-in tab has just reached the redirect URI.
+ *
+ * Failures are recorded in storage rather than thrown: by the time this runs,
+ * the options page's original request has long since returned, so there is
+ * nobody left to reject to.
+ */
+async function handleAuthRedirect(tabId: number, url: string): Promise<void> {
+  const pending = await getPendingAuth();
+  if (!pending || !matchesPending(pending, tabId, url)) return;
+
+  // Clear first: the redirect carries a single-use code, and a retry would
+  // fail confusingly rather than succeed.
+  await clearPendingAuth();
+  await closeAuthTab(tabId);
+
+  try {
+    if (pending.adapterId !== 'netsuite') {
+      throw new Error(`No auth handler for adapter: ${pending.adapterId}`);
+    }
+    await finishNetSuiteAuth(pending, url);
+    await chrome.storage.local.set({ authResult: { adapterId: pending.adapterId, ok: true, at: Date.now() } });
+    await refresh('connect');
+  } catch (err) {
+    console.warn('[task-hub] auth completion failed:', err);
+    await chrome.storage.local.set({
+      authResult: { adapterId: pending.adapterId, ok: false, error: describe(err), at: Date.now() },
+    });
+  }
 }
 
 async function bootstrap(reason: string): Promise<void> {

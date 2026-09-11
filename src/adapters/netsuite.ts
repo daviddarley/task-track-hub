@@ -3,7 +3,13 @@ import { requestJson } from '../core/http.js';
 import { createCredentialStore, getSettings, type CredentialStore } from '../core/storage.js';
 import type { NormalizedTask, TaskAdapter } from '../core/types.js';
 import { SOURCE, accountHost, normalizeCase, type SupportCaseRow } from './netsuite-map.js';
-import { authorize, getAccessToken, type NetSuiteCredentials } from './netsuite-oauth.js';
+import {
+  beginAuthorization,
+  completeAuthorization,
+  getAccessToken,
+  type NetSuiteCredentials,
+} from './netsuite-oauth.js';
+import type { PendingAuth } from '../core/webauth.js';
 
 export type { NetSuiteCredentials } from './netsuite-oauth.js';
 
@@ -36,8 +42,13 @@ export const netSuiteAdapter: TaskAdapter = {
     return Boolean(creds.accountId && creds.clientId && creds.employeeId && creds.refreshToken);
   },
 
+  /**
+   * Opens the sign-in tab and returns — it does not wait for the user. The
+   * flow is finished by `finishNetSuiteAuth` when the redirect arrives, which
+   * may be after this service worker has been torn down and restarted.
+   */
   async authenticate(): Promise<void> {
-    await authorize(netSuiteCredentials);
+    await beginAuthorization(netSuiteCredentials);
   },
 
   async fetchTasks(): Promise<NormalizedTask[]> {
@@ -52,11 +63,53 @@ export const netSuiteAdapter: TaskAdapter = {
 
     const settings = await getSettings();
     const token = await getAccessToken(netSuiteCredentials);
+    const internalId = await resolveEmployeeId(accountId, token, employeeId, creds.resolvedEmployeeId);
 
-    const rows = await runQuery(accountId, token, buildQuery(employeeId, settings.showClosed));
-    return rows.map((row) => normalizeCase(row, accountId));
+    const rows = await runQuery(accountId, token, buildQuery(internalId, settings.showClosed));
+    return rows.map((row) => normalizeCase(row as SupportCaseRow, accountId));
   },
 };
+
+/** A NetSuite internal id is digits; anything else is treated as an email. */
+export function looksLikeInternalId(value: string): boolean {
+  return /^\d+$/.test(value.trim());
+}
+
+/**
+ * Turn whatever the user typed into an employee internal id.
+ *
+ * Asking a teammate for their internal id means sending them into Setup →
+ * Users/Roles to read a number out of a URL. Asking for their email means
+ * asking something they already know, so an email is resolved here once and
+ * cached — the query filters on the id either way.
+ */
+async function resolveEmployeeId(
+  accountId: string,
+  token: string,
+  typed: string,
+  cached: string | undefined,
+): Promise<string> {
+  const value = typed.trim();
+  if (looksLikeInternalId(value)) return value;
+  if (cached && looksLikeInternalId(cached)) return cached;
+
+  const rows = await runQuery(accountId, token, {
+    q: 'SELECT id FROM employee WHERE UPPER(email) = UPPER(?)',
+    params: [value],
+  });
+
+  const id = rows.length > 0 ? String((rows[0] as { id?: unknown }).id ?? '') : '';
+  if (!looksLikeInternalId(id)) {
+    throw new AdapterError(
+      'not_configured',
+      `No NetSuite employee found with email ${value}. Check the address, or enter your internal id instead.`,
+      { source: SOURCE },
+    );
+  }
+
+  await netSuiteCredentials.patch({ resolvedEmployeeId: id });
+  return id;
+}
 
 /**
  * Assignment is direct employee assignment in this account — `assigned` holds
@@ -83,12 +136,15 @@ export function buildQuery(employeeId: string, includeClosed: boolean): { q: str
   };
 }
 
+/** Rows come back as untyped JSON; callers narrow to the shape they asked for. */
+type QueryRow = Record<string, unknown>;
+
 async function runQuery(
   accountId: string,
   token: string,
   query: { q: string; params: string[] },
-): Promise<SupportCaseRow[]> {
-  const collected: SupportCaseRow[] = [];
+): Promise<QueryRow[]> {
+  const collected: QueryRow[] = [];
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const offset = page * PAGE_SIZE;
@@ -116,12 +172,20 @@ async function runQuery(
   return collected;
 }
 
-function readPage(response: unknown): { items: SupportCaseRow[]; hasMore: boolean } {
+/**
+ * Redeem the authorization code once the sign-in tab reaches the redirect URI.
+ * Called from the worker's top-level tab listener, not from the adapter itself.
+ */
+export async function finishNetSuiteAuth(pending: PendingAuth, redirectedTo: string): Promise<void> {
+  await completeAuthorization(netSuiteCredentials, pending, redirectedTo);
+}
+
+function readPage(response: unknown): { items: QueryRow[]; hasMore: boolean } {
   const body = typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {};
   const items = body['items'];
 
   return {
-    items: Array.isArray(items) ? (items as SupportCaseRow[]) : [],
+    items: Array.isArray(items) ? (items as QueryRow[]) : [],
     hasMore: body['hasMore'] === true,
   };
 }

@@ -1,135 +1,140 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Task Track Hub — Options</title>
-    <link rel="stylesheet" href="options.css" />
-  </head>
-  <body>
-    <main class="page">
-      <header class="page__header">
-        <h1>Task Track Hub</h1>
-        <p>Credentials are stored in <code>chrome.storage.local</code> on this machine only — never synced.</p>
-      </header>
 
-      <section class="card">
-        <h2>Sources</h2>
-        <p class="hint">
-          Turn off anything you don't use. A disabled source is never polled, never appears in the popup,
-          and doesn't count toward the badge — its settings below are kept, so you can switch it back on
-          without re-entering anything.
-        </p>
-        <div id="sources" class="checklist checklist--wide"></div>
-      </section>
+<head>
+  <meta charset="utf-8" />
+  <title>Task Track Hub — Options</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
 
-      <section class="card" data-adapter="clickup">
-        <div class="card__head">
-          <h2>ClickUp</h2>
-        </div>
+<body>
+  <main class="page">
+    <header class="page__header">
+      <h1>Task Track Hub</h1>
+      <p>Credentials are stored in <code>chrome.storage.local</code> on this machine only — never synced.</p>
+    </header>
 
-        <p class="hint">
-          Generate a personal API token in ClickUp under <strong>Settings → Apps</strong>. It starts with
-          <code>pk_</code> and does not expire.
-        </p>
+    <section class="card">
+      <h2>Sources</h2>
+      <p class="hint">
+        Turn off anything you don't use. A disabled source is never polled, never appears in the popup,
+        and doesn't count toward the badge — its settings below are kept, so you can switch it back on
+        without re-entering anything.
+      </p>
+      <div id="sources" class="checklist checklist--wide"></div>
+    </section>
 
-        <label class="field">
-          <span class="field__label">Personal API token</span>
-          <input type="password" id="clickup-token" autocomplete="off" spellcheck="false" placeholder="pk_…" />
-        </label>
+    <section class="card" data-adapter="clickup">
+      <div class="card__head">
+        <h2>ClickUp</h2>
+      </div>
 
-        <div class="field" id="clickup-teams-field" hidden>
-          <span class="field__label">Workspaces to poll</span>
-          <div id="clickup-teams" class="checklist"></div>
-        </div>
+      <p class="hint">
+        Generate a personal API token in ClickUp under <strong>Settings → Apps</strong>. It starts with
+        <code>pk_</code> and does not expire.
+      </p>
 
-        <div class="actions">
-          <button type="button" class="button" id="clickup-connect">Connect</button>
-          <button type="button" class="button button--ghost" id="clickup-disconnect">Disconnect</button>
-          <span class="status" id="clickup-status"></span>
-        </div>
-      </section>
+      <label class="field">
+        <span class="field__label">Personal API token</span>
+        <input type="password" id="clickup-token" autocomplete="off" spellcheck="false" placeholder="pk_…" />
+      </label>
 
-      <section class="card" data-adapter="netsuite">
-        <div class="card__head">
-          <h2>NetSuite</h2>
-        </div>
+      <div class="field" id="clickup-teams-field" hidden>
+        <span class="field__label">Workspaces to poll</span>
+        <div id="clickup-teams" class="checklist"></div>
+      </div>
 
-        <p class="hint">
-          Pulls Support Cases assigned to you. Needs a one-time integration record in NetSuite —
-          see <code>docs/netsuite-oauth-setup.md</code>. Uses OAuth 2.0 with PKCE as a public client,
-          so there is no client secret to enter.
-        </p>
+      <div class="actions">
+        <button type="button" class="button" id="clickup-connect">Connect</button>
+        <button type="button" class="button button--ghost" id="clickup-disconnect">Disconnect</button>
+        <span class="status" id="clickup-status"></span>
+      </div>
+    </section>
 
-        <label class="field">
-          <span class="field__label">Account ID</span>
-          <input type="text" id="netsuite-account" autocomplete="off" spellcheck="false" placeholder="6967599" />
-          <span class="hint">Production or sandbox, e.g. <code>1234567_SB1</code>.</span>
-        </label>
+    <section class="card" data-adapter="netsuite">
+      <div class="card__head">
+        <h2>NetSuite</h2>
+      </div>
 
-        <label class="field">
-          <span class="field__label">Client ID</span>
-          <input type="text" id="netsuite-client" autocomplete="off" spellcheck="false" />
-          <span class="hint">From the integration record. Not a secret — public clients have none.</span>
-        </label>
+      <p class="hint">
+        Pulls Support Cases assigned to you. Needs a one-time integration record in NetSuite —
+        see <code>docs/netsuite-oauth-setup.md</code>. Uses OAuth 2.0 with PKCE as a public client,
+        so there is no client secret to enter.
+      </p>
 
-        <label class="field">
-          <span class="field__label">Your employee internal ID</span>
-          <input type="text" id="netsuite-employee" autocomplete="off" spellcheck="false" placeholder="431775" />
-          <span class="hint">Setup &rarr; Users/Roles &rarr; Manage Users &rarr; your record, then read <code>id=</code> from the URL.</span>
-        </label>
+      <label class="field">
+        <span class="field__label">Account ID</span>
+        <input type="text" id="netsuite-account" autocomplete="off" spellcheck="false" placeholder="6967599" />
+        <span class="hint">Production or sandbox, e.g. <code>1234567_SB1</code>.</span>
+      </label>
 
-        <div class="field">
-          <span class="field__label">Redirect URI for the integration record</span>
-          <input type="text" id="netsuite-redirect" readonly />
-          <span class="hint">Copy this into NetSuite exactly, trailing slash included.</span>
-        </div>
+      <label class="field">
+        <span class="field__label">Client ID</span>
+        <input type="text" id="netsuite-client" autocomplete="off" spellcheck="false" />
+        <span class="hint">From the integration record. Not a secret — public clients have none.</span>
+      </label>
 
-        <div class="actions">
-          <button type="button" class="button" id="netsuite-connect">Connect</button>
-          <button type="button" class="button button--ghost" id="netsuite-disconnect">Disconnect</button>
-          <span class="status" id="netsuite-status"></span>
-        </div>
-      </section>
+      <label class="field">
+        <span class="field__label">Your work email</span>
+        <input type="text" id="netsuite-employee" autocomplete="off" spellcheck="false"
+          placeholder="first.name@creativeplanning.com" />
+        <span class="hint">The email on your NetSuite employee record. Your internal id
+          (e.g. <code>431775</code>) also works if you know it.</span>
+      </label>
 
-      <section class="card">
-        <h2>Refresh &amp; display</h2>
+      <div class="field">
+        <span class="field__label">Redirect URI for the integration record</span>
+        <input type="text" id="netsuite-redirect" readonly />
+        <span class="hint">Copy this into NetSuite exactly, trailing slash included.</span>
+      </div>
 
-        <label class="field">
-          <span class="field__label">Refresh interval</span>
-          <select id="refresh-minutes">
-            <option value="5">Every 5 minutes</option>
-            <option value="10">Every 10 minutes</option>
-            <option value="15">Every 15 minutes</option>
-            <option value="30">Every 30 minutes</option>
-            <option value="60">Every hour</option>
-          </select>
-          <span class="hint">Both ClickUp and NetSuite rate-limit; 5 minutes is the floor.</span>
-        </label>
+      <div class="actions">
+        <button type="button" class="button" id="netsuite-connect">Connect</button>
+        <button type="button" class="button button--ghost" id="netsuite-disconnect">Disconnect</button>
+        <span class="status" id="netsuite-status"></span>
+      </div>
+    </section>
 
-        <label class="field">
-          <span class="field__label">Sort by</span>
-          <select id="sort-by">
-            <option value="dueDate">Due date</option>
-            <option value="priority">Priority</option>
-            <option value="title">Title</option>
-          </select>
-        </label>
+    <section class="card">
+      <h2>Refresh &amp; display</h2>
 
-        <label class="check">
-          <input type="checkbox" id="group-by-source" />
-          <span>Group by source</span>
-        </label>
+      <label class="field">
+        <span class="field__label">Refresh interval</span>
+        <select id="refresh-minutes">
+          <option value="5">Every 5 minutes</option>
+          <option value="10">Every 10 minutes</option>
+          <option value="15">Every 15 minutes</option>
+          <option value="30">Every 30 minutes</option>
+          <option value="60">Every hour</option>
+        </select>
+        <span class="hint">Both ClickUp and NetSuite rate-limit; 5 minutes is the floor.</span>
+      </label>
 
-        <label class="check">
-          <input type="checkbox" id="show-closed" />
-          <span>Show recently closed items</span>
-        </label>
+      <label class="field">
+        <span class="field__label">Sort by</span>
+        <select id="sort-by">
+          <option value="dueDate">Due date</option>
+          <option value="priority">Priority</option>
+          <option value="title">Title</option>
+        </select>
+      </label>
 
-        <p class="status" id="settings-status"></p>
-      </section>
+      <label class="check">
+        <input type="checkbox" id="group-by-source" />
+        <span>Group by source</span>
+      </label>
 
-    </main>
+      <label class="check">
+        <input type="checkbox" id="show-closed" />
+        <span>Show recently closed items</span>
+      </label>
 
-    <script type="module" src="options.js"></script>
-  </body>
+      <p class="status" id="settings-status"></p>
+    </section>
+
+  </main>
+
+  <script type="module" src="options.js"></script>
+</body>
+
 </html>

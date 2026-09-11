@@ -11,7 +11,8 @@
   ],
   "host_permissions": [
     "https://api.clickup.com/*",
-    "https://*.suitetalk.api.netsuite.com/*"
+    "https://*.suitetalk.api.netsuite.com/*",
+    "https://cnkigchgphmlkdmiiejnkkbblnoabfob.chromiumapp.org/*"
   ],
   "background": {
     "service_worker": "background.js",

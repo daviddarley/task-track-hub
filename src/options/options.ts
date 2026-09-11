@@ -62,6 +62,7 @@ async function load(): Promise<void> {
   renderNetSuiteConnection(ns.refreshToken !== undefined);
   await renderSources();
   wireEvents();
+  watchAuthResult();
 }
 
 /**
@@ -167,28 +168,55 @@ async function connectNetSuite(): Promise<void> {
     report(els.nsStatus, 'Account ID, Client ID and employee ID are all required.', 'error');
     return;
   }
-  if (!/^\d+$/.test(employeeId)) {
-    report(els.nsStatus, 'Employee ID should be the numeric internal id, e.g. 431775.', 'error');
+  // Either a numeric internal id or an email address — an email is what a
+  // teammate actually knows about themselves, and the adapter resolves it.
+  if (!/^\d+$/.test(employeeId) && !employeeId.includes('@')) {
+    report(els.nsStatus, 'Enter your work email, or your numeric NetSuite internal id.', 'error');
     return;
   }
 
   setNetSuiteBusy(true);
-  report(els.nsStatus, 'Opening NetSuite sign-in…');
+  report(els.nsStatus, 'Opening NetSuite sign-in in a new tab…');
 
   try {
     // Saved before the flow starts: the worker reads them to build the
-    // authorize URL, and they are settings rather than secrets.
-    await netSuiteCredentials.patch({ accountId, clientId, employeeId });
+    // authorize URL, and they are settings rather than secrets. Any previously
+    // resolved id is dropped, since the identity being connected may differ.
+    await netSuiteCredentials.patch({ accountId, clientId, employeeId, resolvedEmployeeId: '' });
     await sendMessage({ type: 'connect', adapterId: 'netsuite' });
 
-    renderNetSuiteConnection(true);
-    await renderSources();
-    report(els.nsStatus, 'Connected.', 'ok');
+    // `connect` returns as soon as the tab opens — sign-in can take minutes and
+    // outlives the service worker, so the outcome arrives via storage instead.
+    report(els.nsStatus, 'Waiting for you to finish signing in…');
   } catch (err) {
     report(els.nsStatus, describe(err), 'error');
-  } finally {
     setNetSuiteBusy(false);
   }
+}
+
+/**
+ * The worker records how the sign-in ended, because by the time it finishes
+ * there is no pending request left to answer.
+ */
+function watchAuthResult(): void {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes['authResult']) return;
+
+    const result = changes['authResult'].newValue as
+      | { adapterId?: string; ok?: boolean; error?: string }
+      | undefined;
+    if (result?.adapterId !== 'netsuite') return;
+
+    setNetSuiteBusy(false);
+
+    if (result.ok) {
+      renderNetSuiteConnection(true);
+      void renderSources();
+      report(els.nsStatus, 'Connected.', 'ok');
+    } else {
+      report(els.nsStatus, result.error ?? 'Sign-in failed.', 'error');
+    }
+  });
 }
 
 async function disconnectNetSuite(): Promise<void> {
