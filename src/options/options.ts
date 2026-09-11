@@ -4,6 +4,7 @@
  * is the only context Manifest V3 grants cross-origin access to.
  */
 
+import { basecampCredentials } from '../adapters/basecamp.js';
 import { clickUpCredentials, type ClickUpCredentials } from '../adapters/clickup.js';
 import { adapters } from '../adapters/index.js';
 import { netSuiteCredentials } from '../adapters/netsuite.js';
@@ -27,6 +28,12 @@ const els = {
   nsConnect: requireElement('netsuite-connect', 'button'),
   nsDisconnect: requireElement('netsuite-disconnect', 'button'),
   nsStatus: requireElement('netsuite-status'),
+  bcClient: requireElement('basecamp-client', 'input'),
+  bcSecret: requireElement('basecamp-secret', 'input'),
+  bcRedirect: requireElement('basecamp-redirect', 'input'),
+  bcConnect: requireElement('basecamp-connect', 'button'),
+  bcDisconnect: requireElement('basecamp-disconnect', 'button'),
+  bcStatus: requireElement('basecamp-status'),
   refreshMinutes: requireElement('refresh-minutes', 'select'),
   sortBy: requireElement('sort-by', 'select'),
   groupBySource: requireElement('group-by-source', 'input'),
@@ -39,10 +46,11 @@ type Tone = 'ok' | 'error';
 void load();
 
 async function load(): Promise<void> {
-  const [settings, creds, ns] = await Promise.all([
+  const [settings, creds, ns, bc] = await Promise.all([
     getSettings(),
     clickUpCredentials.get(),
     netSuiteCredentials.get(),
+    basecampCredentials.get(),
   ]);
 
   els.refreshMinutes.value = String(settings.refreshMinutes);
@@ -58,10 +66,74 @@ async function load(): Promise<void> {
   // errors — it must match the integration record byte for byte.
   els.nsRedirect.value = chrome.identity.getRedirectURL();
 
+  els.bcClient.value = bc.clientId ?? '';
+  els.bcSecret.value = bc.clientSecret ?? '';
+  els.bcRedirect.value = chrome.identity.getRedirectURL();
+
   renderConnection(creds);
   renderNetSuiteConnection(ns.refreshToken !== undefined);
+  renderBasecampConnection(bc);
   await renderSources();
   wireEvents();
+}
+
+function renderBasecampConnection(creds: Partial<import('../adapters/basecamp.js').BasecampCredentials>): void {
+  const connected = Boolean(creds.refreshToken && creds.personId);
+  els.bcDisconnect.hidden = !connected;
+  els.bcConnect.textContent = connected ? 'Reconnect' : 'Connect';
+
+  if (connected) {
+    const where = creds.accountName ? ` (${creds.accountName})` : '';
+    report(els.bcStatus, `Connected as ${creds.personName ?? 'Basecamp user'}${where}.`, 'ok');
+  }
+}
+
+async function connectBasecamp(): Promise<void> {
+  const clientId = els.bcClient.value.trim();
+  const clientSecret = els.bcSecret.value.trim();
+
+  if (!clientId || !clientSecret) {
+    report(els.bcStatus, 'Both the client ID and client secret are required.', 'error');
+    return;
+  }
+
+  setBasecampBusy(true);
+  report(els.bcStatus, 'Opening Basecamp sign-in…');
+
+  try {
+    await basecampCredentials.patch({ clientId, clientSecret });
+    await sendMessage({ type: 'connect', adapterId: 'basecamp' });
+
+    renderBasecampConnection(await basecampCredentials.get());
+    await renderSources();
+  } catch (err) {
+    report(els.bcStatus, describe(err), 'error');
+  } finally {
+    setBasecampBusy(false);
+  }
+}
+
+async function disconnectBasecamp(): Promise<void> {
+  setBasecampBusy(true);
+
+  try {
+    await basecampCredentials.clear();
+    els.bcClient.value = '';
+    els.bcSecret.value = '';
+    renderBasecampConnection({});
+    await renderSources();
+    await sendMessage({ type: 'refresh' });
+    report(els.bcStatus, 'Disconnected.');
+  } catch (err) {
+    report(els.bcStatus, describe(err), 'error');
+  } finally {
+    setBasecampBusy(false);
+  }
+}
+
+function setBasecampBusy(busy: boolean): void {
+  els.bcConnect.disabled = busy;
+  els.bcDisconnect.disabled = busy;
 }
 
 /**
@@ -155,6 +227,9 @@ function wireEvents(): void {
 
   els.nsConnect.addEventListener('click', () => void connectNetSuite());
   els.nsDisconnect.addEventListener('click', () => void disconnectNetSuite());
+
+  els.bcConnect.addEventListener('click', () => void connectBasecamp());
+  els.bcDisconnect.addEventListener('click', () => void disconnectBasecamp());
 
 }
 

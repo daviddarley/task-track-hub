@@ -11,7 +11,9 @@
   ],
   "host_permissions": [
     "https://api.clickup.com/*",
-    "https://*.suitetalk.api.netsuite.com/*"
+    "https://*.suitetalk.api.netsuite.com/*",
+    "https://basecamp.com/*",
+    "https://launchpad.37signals.com/*"
   ],
   "background": {
     "service_worker": "background.js",

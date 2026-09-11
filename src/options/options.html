@@ -95,6 +95,41 @@
       </div>
     </section>
 
+    <section class="card" data-adapter="basecamp">
+      <div class="card__head">
+        <h2>Basecamp</h2>
+      </div>
+
+      <p class="hint">
+        Pulls Basecamp 2 to-dos assigned to you. Basecamp has no PKCE or public-client mode, so unlike
+        NetSuite it does need a client secret — paste the pair your team was given. It is stored only on
+        this machine. Your account and person id are discovered after sign-in.
+      </p>
+
+      <label class="field">
+        <span class="field__label">Client ID</span>
+        <input type="text" id="basecamp-client" autocomplete="off" spellcheck="false" />
+      </label>
+
+      <label class="field">
+        <span class="field__label">Client secret</span>
+        <input type="password" id="basecamp-secret" autocomplete="off" spellcheck="false" />
+        <span class="hint">Treat this like a password. Never commit it or post it publicly.</span>
+      </label>
+
+      <div class="field">
+        <span class="field__label">Redirect URI for the integration</span>
+        <input type="text" id="basecamp-redirect" readonly />
+        <span class="hint">Must match the integration at launchpad.37signals.com exactly.</span>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="button" id="basecamp-connect">Connect</button>
+        <button type="button" class="button button--ghost" id="basecamp-disconnect">Disconnect</button>
+        <span class="status" id="basecamp-status"></span>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Refresh &amp; display</h2>
 
