@@ -1,6 +1,7 @@
 ﻿import type { TaskAdapter } from '../core/types.js';
 import { basecampAdapter } from './basecamp.js';
 import { clickUpAdapter } from './clickup.js';
+import { gitHubAdapter } from './github.js';
 import { netSuiteAdapter } from './netsuite.js';
 
 /**
@@ -10,7 +11,12 @@ import { netSuiteAdapter } from './netsuite.js';
  *
  * Array order is the display order in the popup and options page.
  */
-export const adapters: readonly TaskAdapter[] = [clickUpAdapter, netSuiteAdapter, basecampAdapter];
+export const adapters: readonly TaskAdapter[] = [
+  clickUpAdapter,
+  netSuiteAdapter,
+  basecampAdapter,
+  gitHubAdapter,
+];
 
 export function getAdapter(id: string): TaskAdapter | undefined {
   return adapters.find((adapter) => adapter.id === id);

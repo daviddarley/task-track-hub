@@ -130,6 +130,34 @@
       </div>
     </section>
 
+    <section class="card" data-adapter="github">
+      <div class="card__head">
+        <h2>GitHub</h2>
+      </div>
+
+      <p class="hint">
+        Lists open pull requests assigned to you. Generate a personal access token at
+        <strong>Settings → Developer settings → Personal access tokens</strong>. A classic token needs the
+        <code>repo</code> scope to see private repositories; public-only needs no scope at all.
+      </p>
+
+      <label class="field">
+        <span class="field__label">Personal access token</span>
+        <input type="password" id="github-token" autocomplete="off" spellcheck="false" placeholder="ghp_… or github_pat_…" />
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="github-reviews" />
+        <span>Also include PRs awaiting my review</span>
+      </label>
+
+      <div class="actions">
+        <button type="button" class="button" id="github-connect">Connect</button>
+        <button type="button" class="button button--ghost" id="github-disconnect">Disconnect</button>
+        <span class="status" id="github-status"></span>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Refresh &amp; display</h2>
 

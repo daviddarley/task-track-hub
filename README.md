@@ -147,7 +147,20 @@ no jest, no vitest, no config.
       grouping options, keyboard navigation.
 - [ ] **Phase 4** — Extensibility hardening: per-adapter enable toggles are in, the registry is in,
       the contract is written down.
-- [ ] **Phase 5** — A third source (Jira or GitHub Issues) as the real test of the seam.
+- [x] **Phase 5** — Two more sources, as the real test of the seam:
+      **Basecamp 2** to-dos ([setup](docs/basecamp-setup.md), [why its auth is awkward](docs/basecamp-assessment.md))
+      and **GitHub** pull requests assigned to you. Each was three adapter files, one registry line,
+      a host permission and an options card — nothing in `core/`, the popup, the badge, `sync.ts`
+      or the storage schema changed, and the Sources toggle appeared on its own.
+
+## Sources at a glance
+
+| Source | Auth | Shared secret? | Due dates | Verified live |
+|---|---|---|---|---|
+| ClickUp | Personal token | No — one per person | Yes | Yes |
+| NetSuite | OAuth 2.0 + PKCE, public client | No — none exists | No such field | Yes |
+| GitHub | Personal access token | No — one per person | Milestones only | Query verified |
+| Basecamp 2 | OAuth 2.0 + client secret | **Yes** — no PKCE available | Yes | Not yet |
 
 ## Open questions carried forward from the plan
 

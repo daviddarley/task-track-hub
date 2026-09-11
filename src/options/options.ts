@@ -6,6 +6,7 @@
 
 import { basecampCredentials } from '../adapters/basecamp.js';
 import { clickUpCredentials, type ClickUpCredentials } from '../adapters/clickup.js';
+import { gitHubCredentials } from '../adapters/github.js';
 import { adapters } from '../adapters/index.js';
 import { netSuiteCredentials } from '../adapters/netsuite.js';
 import { sendMessage } from '../core/messages.js';
@@ -34,6 +35,11 @@ const els = {
   bcConnect: requireElement('basecamp-connect', 'button'),
   bcDisconnect: requireElement('basecamp-disconnect', 'button'),
   bcStatus: requireElement('basecamp-status'),
+  ghToken: requireElement('github-token', 'input'),
+  ghReviews: requireElement('github-reviews', 'input'),
+  ghConnect: requireElement('github-connect', 'button'),
+  ghDisconnect: requireElement('github-disconnect', 'button'),
+  ghStatus: requireElement('github-status'),
   refreshMinutes: requireElement('refresh-minutes', 'select'),
   sortBy: requireElement('sort-by', 'select'),
   groupBySource: requireElement('group-by-source', 'input'),
@@ -46,11 +52,12 @@ type Tone = 'ok' | 'error';
 void load();
 
 async function load(): Promise<void> {
-  const [settings, creds, ns, bc] = await Promise.all([
+  const [settings, creds, ns, bc, gh] = await Promise.all([
     getSettings(),
     clickUpCredentials.get(),
     netSuiteCredentials.get(),
     basecampCredentials.get(),
+    gitHubCredentials.get(),
   ]);
 
   els.refreshMinutes.value = String(settings.refreshMinutes);
@@ -70,11 +77,71 @@ async function load(): Promise<void> {
   els.bcSecret.value = bc.clientSecret ?? '';
   els.bcRedirect.value = chrome.identity.getRedirectURL();
 
+  els.ghToken.value = gh.token ?? '';
+  els.ghReviews.checked = gh.includeReviewRequests === true;
+
   renderConnection(creds);
   renderNetSuiteConnection(ns.refreshToken !== undefined);
   renderBasecampConnection(bc);
+  renderGitHubConnection(gh);
   await renderSources();
   wireEvents();
+}
+
+function renderGitHubConnection(creds: Partial<import('../adapters/github.js').GitHubCredentials>): void {
+  els.ghDisconnect.hidden = !creds.token;
+  els.ghConnect.textContent = creds.login ? 'Re-check token' : 'Connect';
+
+  if (creds.login) report(els.ghStatus, `Connected as ${creds.login}.`, 'ok');
+}
+
+async function connectGitHub(): Promise<void> {
+  const token = els.ghToken.value.trim();
+
+  if (!token) {
+    report(els.ghStatus, 'Paste a personal access token first.', 'error');
+    return;
+  }
+
+  setGitHubBusy(true);
+  report(els.ghStatus, 'Checking token…');
+
+  try {
+    await gitHubCredentials.patch({ token, includeReviewRequests: els.ghReviews.checked });
+    await sendMessage({ type: 'connect', adapterId: 'github' });
+
+    const creds = await gitHubCredentials.get();
+    renderGitHubConnection(creds);
+    await renderSources();
+    report(els.ghStatus, `Connected as ${creds.login ?? 'GitHub user'}.`, 'ok');
+  } catch (err) {
+    report(els.ghStatus, describe(err), 'error');
+  } finally {
+    setGitHubBusy(false);
+  }
+}
+
+async function disconnectGitHub(): Promise<void> {
+  setGitHubBusy(true);
+
+  try {
+    await gitHubCredentials.clear();
+    els.ghToken.value = '';
+    els.ghReviews.checked = false;
+    renderGitHubConnection({});
+    await renderSources();
+    await sendMessage({ type: 'refresh' });
+    report(els.ghStatus, 'Disconnected.');
+  } catch (err) {
+    report(els.ghStatus, describe(err), 'error');
+  } finally {
+    setGitHubBusy(false);
+  }
+}
+
+function setGitHubBusy(busy: boolean): void {
+  els.ghConnect.disabled = busy;
+  els.ghDisconnect.disabled = busy;
 }
 
 function renderBasecampConnection(creds: Partial<import('../adapters/basecamp.js').BasecampCredentials>): void {
@@ -230,6 +297,18 @@ function wireEvents(): void {
 
   els.bcConnect.addEventListener('click', () => void connectBasecamp());
   els.bcDisconnect.addEventListener('click', () => void disconnectBasecamp());
+
+  els.ghConnect.addEventListener('click', () => void connectGitHub());
+  els.ghDisconnect.addEventListener('click', () => void disconnectGitHub());
+
+  els.ghReviews.addEventListener('change', () => {
+    void (async () => {
+      // Changes what we ask GitHub for, so it needs a refetch, not a re-render.
+      await gitHubCredentials.patch({ includeReviewRequests: els.ghReviews.checked });
+      await sendMessage({ type: 'refresh' });
+      report(els.ghStatus, 'Saved.', 'ok');
+    })();
+  });
 
 }
 

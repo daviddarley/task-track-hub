@@ -13,7 +13,8 @@
     "https://api.clickup.com/*",
     "https://*.suitetalk.api.netsuite.com/*",
     "https://basecamp.com/*",
-    "https://launchpad.37signals.com/*"
+    "https://launchpad.37signals.com/*",
+    "https://api.github.com/*"
   ],
   "background": {
     "service_worker": "background.js",
