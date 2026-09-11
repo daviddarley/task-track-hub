@@ -3,13 +3,7 @@ import { requestJson } from '../core/http.js';
 import { createCredentialStore, getSettings, type CredentialStore } from '../core/storage.js';
 import type { NormalizedTask, TaskAdapter } from '../core/types.js';
 import { SOURCE, accountHost, normalizeCase, type SupportCaseRow } from './netsuite-map.js';
-import {
-  beginAuthorization,
-  completeAuthorization,
-  getAccessToken,
-  type NetSuiteCredentials,
-} from './netsuite-oauth.js';
-import type { PendingAuth } from '../core/webauth.js';
+import { authorize, getAccessToken, type NetSuiteCredentials } from './netsuite-oauth.js';
 
 export type { NetSuiteCredentials } from './netsuite-oauth.js';
 
@@ -42,13 +36,8 @@ export const netSuiteAdapter: TaskAdapter = {
     return Boolean(creds.accountId && creds.clientId && creds.employeeId && creds.refreshToken);
   },
 
-  /**
-   * Opens the sign-in tab and returns — it does not wait for the user. The
-   * flow is finished by `finishNetSuiteAuth` when the redirect arrives, which
-   * may be after this service worker has been torn down and restarted.
-   */
   async authenticate(): Promise<void> {
-    await beginAuthorization(netSuiteCredentials);
+    await authorize(netSuiteCredentials);
   },
 
   async fetchTasks(): Promise<NormalizedTask[]> {
@@ -170,14 +159,6 @@ async function runQuery(
   }
 
   return collected;
-}
-
-/**
- * Redeem the authorization code once the sign-in tab reaches the redirect URI.
- * Called from the worker's top-level tab listener, not from the adapter itself.
- */
-export async function finishNetSuiteAuth(pending: PendingAuth, redirectedTo: string): Promise<void> {
-  await completeAuthorization(netSuiteCredentials, pending, redirectedTo);
 }
 
 function readPage(response: unknown): { items: QueryRow[]; hasMore: boolean } {

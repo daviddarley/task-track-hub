@@ -62,7 +62,6 @@ async function load(): Promise<void> {
   renderNetSuiteConnection(ns.refreshToken !== undefined);
   await renderSources();
   wireEvents();
-  watchAuthResult();
 }
 
 /**
@@ -176,7 +175,7 @@ async function connectNetSuite(): Promise<void> {
   }
 
   setNetSuiteBusy(true);
-  report(els.nsStatus, 'Opening NetSuite sign-in in a new tab…');
+  report(els.nsStatus, 'Opening NetSuite sign-in…');
 
   try {
     // Saved before the flow starts: the worker reads them to build the
@@ -185,38 +184,14 @@ async function connectNetSuite(): Promise<void> {
     await netSuiteCredentials.patch({ accountId, clientId, employeeId, resolvedEmployeeId: '' });
     await sendMessage({ type: 'connect', adapterId: 'netsuite' });
 
-    // `connect` returns as soon as the tab opens — sign-in can take minutes and
-    // outlives the service worker, so the outcome arrives via storage instead.
-    report(els.nsStatus, 'Waiting for you to finish signing in…');
+    renderNetSuiteConnection(true);
+    await renderSources();
+    report(els.nsStatus, 'Connected.', 'ok');
   } catch (err) {
     report(els.nsStatus, describe(err), 'error');
+  } finally {
     setNetSuiteBusy(false);
   }
-}
-
-/**
- * The worker records how the sign-in ended, because by the time it finishes
- * there is no pending request left to answer.
- */
-function watchAuthResult(): void {
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes['authResult']) return;
-
-    const result = changes['authResult'].newValue as
-      | { adapterId?: string; ok?: boolean; error?: string }
-      | undefined;
-    if (result?.adapterId !== 'netsuite') return;
-
-    setNetSuiteBusy(false);
-
-    if (result.ok) {
-      renderNetSuiteConnection(true);
-      void renderSources();
-      report(els.nsStatus, 'Connected.', 'ok');
-    } else {
-      report(els.nsStatus, result.error ?? 'Sign-in failed.', 'error');
-    }
-  });
 }
 
 async function disconnectNetSuite(): Promise<void> {

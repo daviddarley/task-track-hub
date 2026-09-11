@@ -13,7 +13,6 @@ import { AdapterError } from '../core/errors.js';
 import { requestJson } from '../core/http.js';
 import { createPkcePair, createState } from '../core/pkce.js';
 import type { CredentialStore } from '../core/storage.js';
-import { startAuthTab, type PendingAuth } from '../core/webauth.js';
 import { SOURCE, accountHost } from './netsuite-map.js';
 
 export interface NetSuiteCredentials {
@@ -55,13 +54,19 @@ const EXPIRY_SKEW_MS = 60_000;
 let refreshing: Promise<string> | null = null;
 
 /**
- * Start the interactive flow: build the authorize URL and open it in a tab.
+ * Run the interactive flow and persist the resulting tokens.
  *
- * This returns as soon as the tab is open — the user may take minutes to get
- * through SSO, far longer than a service worker survives. Completion happens in
- * `completeAuthorization`, driven by a top-level tab listener.
+ * Uses `chrome.identity.launchWebAuthFlow`, which opens a small fixed-size
+ * popup window that cannot be resized or turned into a tab. That is a real
+ * usability wart, but it is the mechanism that works: Chrome holds the service
+ * worker alive for the duration of the call, so a sign-in that takes minutes
+ * survives. A plain tab does not get that, and the flow has to be rebuilt
+ * around persisted state to cope — which was tried and did not work here.
+ *
+ * Must be called from the service worker: `chrome.identity` is unavailable to
+ * content scripts, and the token exchange is a cross-origin request.
  */
-export async function beginAuthorization(store: CredentialStore<NetSuiteCredentials>): Promise<void> {
+export async function authorize(store: CredentialStore<NetSuiteCredentials>): Promise<void> {
   const { accountId, clientId } = await store.get();
   if (!accountId || !clientId) {
     throw new AdapterError('not_configured', 'NetSuite account id and client id are required.', { source: SOURCE });
@@ -82,19 +87,8 @@ export async function beginAuthorization(store: CredentialStore<NetSuiteCredenti
     code_challenge_method: pkce.method,
   }).toString();
 
-  await startAuthTab(authUrl.toString(), { adapterId: SOURCE, verifier: pkce.verifier, state, redirectUri });
-}
-
-/**
- * Finish a flow started by `beginAuthorization`, given the URL NetSuite
- * redirected to and the pending record saved when it started.
- */
-export async function completeAuthorization(
-  store: CredentialStore<NetSuiteCredentials>,
-  pending: PendingAuth,
-  redirectedTo: string,
-): Promise<void> {
-  const returned = new URL(redirectedTo);
+  const redirected = await launchWebAuthFlow(authUrl.toString());
+  const returned = new URL(redirected);
 
   const error = returned.searchParams.get('error');
   if (error) {
@@ -106,7 +100,7 @@ export async function completeAuthorization(
 
   // Proves the redirect belongs to the request we started, not one an attacker
   // induced. A mismatch is the one case where we must not redeem the code.
-  if (returned.searchParams.get('state') !== pending.state) {
+  if (returned.searchParams.get('state') !== state) {
     throw new AdapterError('auth', 'NetSuite returned a mismatched state value; authorization aborted.', {
       source: SOURCE,
     });
@@ -117,19 +111,14 @@ export async function completeAuthorization(
     throw new AdapterError('auth', 'NetSuite did not return an authorization code.', { source: SOURCE });
   }
 
-  const { accountId, clientId } = await store.get();
-  if (!accountId || !clientId) {
-    throw new AdapterError('not_configured', 'NetSuite account id and client id are required.', { source: SOURCE });
-  }
-
   const tokens = await exchange(accountId, {
     grant_type: 'authorization_code',
     code,
-    redirect_uri: pending.redirectUri,
+    redirect_uri: redirectUri,
     client_id: clientId,
-    // The verifier is what makes the intercepted code useless to anyone else —
+    // The verifier is what makes an intercepted code useless to anyone else —
     // it never travelled with the redirect.
-    code_verifier: pending.verifier,
+    code_verifier: pkce.verifier,
   });
 
   await store.patch(tokens);
@@ -220,5 +209,27 @@ function readTokenSet(response: unknown): TokenSet {
     // Default to NetSuite's documented hour if the field is missing or junk.
     expiresAt: Date.now() + (Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600) * 1000,
   };
+}
+
+/**
+ * `chrome.identity.launchWebAuthFlow` uses callbacks and signals failure via
+ * `chrome.runtime.lastError`; a user who closes the window resolves with
+ * `undefined` rather than rejecting.
+ */
+function launchWebAuthFlow(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    chrome.identity.launchWebAuthFlow({ url, interactive: true }, (redirectUrl) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new AdapterError('auth', `NetSuite sign-in failed: ${lastError.message}`, { source: SOURCE }));
+        return;
+      }
+      if (!redirectUrl) {
+        reject(new AdapterError('auth', 'NetSuite sign-in was cancelled.', { source: SOURCE }));
+        return;
+      }
+      resolve(redirectUrl);
+    });
+  });
 }
 
